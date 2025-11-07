@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Nokia Snake Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; }
+        #gameStats {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: #32CD32;
+            font-family: 'Courier New', monospace;
+            font-size: 24px;
+            z-index: 100;
+            text-shadow: 0 0 5px #32CD32;
+        }
+        #speedControls {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+        }
+        .control-btn {
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+            background: #32CD32;
+            border: none;
+            color: black;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            transition: all 0.3s ease;
+        }
+        .control-btn:hover {
+            background: #28a428;
+            transform: scale(1.05);
+        }
+        .control-btn:disabled {
+            background: #1a4d1a;
+            color: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+        #speedDisplay {
+            color: #32CD32;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            margin: 5px 0;
+            text-shadow: 0 0 5px #32CD32;
+        }
+        #gameOver {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: #32CD32;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            z-index: 100;
+            border: 2px solid #32CD32;
+            box-shadow: 0 0 10px #32CD32;
+        }
+        #gameOver button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+            background: #32CD32;
+            border: none;
+            color: black;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameStats">
+        Score: <span id="score">0</span><br>
+        High Score: <span id="highScore">0</span>
+    </div>
+    <div id="speedControls">
+        <button id="speedUp" class="control-btn">Speed Up ▲</button>
+        <div id="speedDisplay">Speed: 1x</div>
+        <button id="speedDown" class="control-btn">Speed Down ▼</button>
+    </div>
+    <div id="gameOver">
+        <h1>Game Over!</h1>
+        <p>Score: <span id="finalScore">0</span></p>
+        <p>High Score: <span id="finalHighScore">0</span></p>
+        <button onclick="restartGame()">Play Again</button>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // [Previous code remains the same until the global variables]
+        let scene, camera, renderer;
+        let snake = [];
+        let food;
+        let direction = new THREE.Vector3(1, 0, 0);
+        let nextDirection = new THREE.Vector3(1, 0, 0);
+        let score = 0;
+        let highScore = 0;
+        let gameActive = true;
+        let gridSize = 20;
+        let baseInterval = 150; // Base speed interval
+        let moveInterval = baseInterval;
+        let speedMultiplier = 1;
+        let lastMoveTime = 0;
+        const MAX_SPEED = 5;
+        const MIN_SPEED = 0.5;
+
+        // Add speed control functions
+        function updateSpeed(change) {
+            speedMultiplier = Math.max(MIN_SPEED, Math.min(MAX_SPEED, speedMultiplier + change));
+            moveInterval = baseInterval / speedMultiplier;
+            
+            // Update speed display
+            document.getElementById('speedDisplay').textContent = `Speed: ${speedMultiplier.toFixed(1)}x`;
+            
+            // Update button states
+            document.getElementById('speedUp').disabled = speedMultiplier >= MAX_SPEED;
+            document.getElementById('speedDown').disabled = speedMultiplier <= MIN_SPEED;
+        }
+
+        function initSpeedControls() {
+            document.getElementById('speedUp').addEventListener('click', () => updateSpeed(0.5));
+            document.getElementById('speedDown').addEventListener('click', () => updateSpeed(-0.5));
+            updateSpeed(0); // Initialize button states
+        }
+
+        // Modify the init function to include speed controls
+        function init() {
+            // [Previous init code remains the same]
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x1a1a1a);
+            document.body.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 10);
+            scene.add(directionalLight);
+
+            createBoard();
+            createSnake();
+            createFood();
+
+            camera.position.set(0, 25, 25);
+            camera.lookAt(0, 0, 0);
+
+            document.addEventListener('keydown', handleKeyDown);
+            initSpeedControls();
+        }
+
+        // Modify the restartGame function to reset speed
+        function restartGame() {
+            snake.forEach(segment => scene.remove(segment));
+            snake = [];
+            
+            score = 0;
+            gameActive = true;
+            direction.set(1, 0, 0);
+            nextDirection.set(1, 0, 0);
+            
+            // Reset speed to default
+            speedMultiplier = 0.5;
+            moveInterval = baseInterval;
+            updateSpeed(0);
+            
+            document.getElementById('score').textContent = '0';
+            document.getElementById('gameOver').style.display = 'none';
+            
+            createSnake();
+            createFood();
+        }
+
+        // [Rest of the previous code remains the same]
+        function createBoard() {
+            const boardGeometry = new THREE.BoxGeometry(gridSize + 2, 1, gridSize + 2);
+            const boardMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x2a2a2a,
+                shininess: 50
+            });
+            const board = new THREE.Mesh(boardGeometry, boardMaterial);
+            board.position.y = -0.5;
+            scene.add(board);
+
+            const gridHelper = new THREE.GridHelper(gridSize, gridSize, 0x32CD32, 0x32CD32);
+            gridHelper.material.opacity = 0.2;
+            gridHelper.material.transparent = true;
+            scene.add(gridHelper);
+        }
+
+        function createSnakeSegment(position) {
+            const geometry = new THREE.SphereGeometry(0.4, 16, 16);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: 0x32CD32,
+                shininess: 100
+            });
+            const segment = new THREE.Mesh(geometry, material);
+            segment.position.copy(position);
+            scene.add(segment);
+            return segment;
+        }
+
+        function createSnake() {
+            const startPos = new THREE.Vector3(0, 0, 0);
+            for (let i = 0; i < 3; i++) {
+                const segment = createSnakeSegment(
+                    new THREE.Vector3(startPos.x - i, startPos.y, startPos.z)
+                );
+                snake.push(segment);
+            }
+        }
+
+        function createFood() {
+            if (food) scene.remove(food);
+            
+            const geometry = new THREE.OctahedronGeometry(0.4);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: 0xff0000,
+                shininess: 100,
+                emissive: 0x600000
+            });
+            food = new THREE.Mesh(geometry, material);
+            
+            do {
+                food.position.x = Math.floor(Math.random() * gridSize - gridSize/2);
+                food.position.z = Math.floor(Math.random() * gridSize - gridSize/2);
+            } while (isPositionOccupied(food.position));
+            
+            scene.add(food);
+        }
+
+        function isPositionOccupied(position) {
+            return snake.some(segment => 
+                segment.position.x === position.x && 
+                segment.position.z === position.z
+            );
+        }
+
+        function handleKeyDown(event) {
+            switch(event.key) {
+                case 'ArrowUp':
+                case 'w':
+                    if (direction.z !== 1) nextDirection.set(0, 0, -1);
+                    break;
+                case 'ArrowDown':
+                case 's':
+                    if (direction.z !== -1) nextDirection.set(0, 0, 1);
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                    if (direction.x !== 1) nextDirection.set(-1, 0, 0);
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                    if (direction.x !== -1) nextDirection.set(1, 0, 0);
+                    break;
+            }
+        }
+
+        function moveSnake() {
+            if (!gameActive) return;
+
+            const currentTime = Date.now();
+            if (currentTime - lastMoveTime < moveInterval) return;
+            lastMoveTime = currentTime;
+
+            direction.copy(nextDirection);
+
+            const head = snake[0];
+            const newPosition = head.position.clone().add(direction);
+
+            if (Math.abs(newPosition.x) > gridSize/2 || Math.abs(newPosition.z) > gridSize/2) {
+                gameOver();
+                return;
+            }
+
+            if (isPositionOccupied(newPosition)) {
+                gameOver();
+                return;
+            }
+
+            if (newPosition.distanceTo(food.position) < 1) {
+                score += 10;
+                document.getElementById('score').textContent = score;
+                createFood();
+            } else {
+                const tail = snake.pop();
+                scene.remove(tail);
+            }
+
+            const newHead = createSnakeSegment(newPosition);
+            snake.unshift(newHead);
+
+            snake.forEach((segment, i) => {
+                if (i < snake.length - 1) {
+                    const dir = snake[i + 1].position.clone().sub(segment.position);
+                    segment.lookAt(snake[i + 1].position);
+                }
+            });
+        }
+
+        function gameOver() {
+            gameActive = false;
+            highScore = Math.max(score, highScore);
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('finalHighScore').textContent = highScore;
+            document.getElementById('highScore').textContent = highScore;
+            document.getElementById('gameOver').style.display = 'block';
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (food) {
+                food.rotation.y += 0.05;
+            }
+
+            moveSnake();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        init();
+        animate();
+    </script>
+</body>
+</html>
